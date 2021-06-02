@@ -429,5 +429,133 @@ func (n *node) search(parts []string, height int) *node {
 	return nil
 }
 ```
+## 分组
+路由的分组控制。
+分组是指将路由分组。对某一组路由进行相似的处理。如：
+1. 以`/post`开头的路由匿名可访问；
+2. 以`/admin`开头的路由需要鉴权；
+3. 以`/api`开头的路由为`RESTful`接口，对接第三方，需要第三方鉴权。
+
+大部分情况下，路由分组是通过相同的前缀来实现的。
+每个分组可以使用同一个中间件，分组的子分组可拥有单独的中间件。
+### 分组嵌套
+一个`Group`对象的属性：
+1. 前缀;要支持分组嵌套,需要知道当前分组的父亲是谁(`parent`).
+```go
+type HandlerFunc func(*Context)
+
+type RouterGroup struct {
+	prefix      string        // 前缀
+	middlewares []HandlerFunc // middleware
+	parent      *RouterGroup  // parent
+	engine      *Engine
+}
+type Engine struct {
+	*RouterGroup
+	router *router
+	groups []*RouterGroup
+}
+
+func New() *Engine {
+	engine := &Engine{
+		router: NewRouter(),
+	}
+	engine.RouterGroup = &RouterGroup{engine: engine}
+	engine.groups = []*RouterGroup{engine.RouterGroup}
+	return engine
+}
+
+func (group *RouterGroup) Group(prefix string) *RouterGroup {
+	engine := group.engine
+	newGroup := &RouterGroup{
+		prefix: group.prefix + prefix,
+		parent: group,
+		engine: engine,
+	}
+	engine.groups = append(engine.groups, newGroup)
+	return newGroup
+}
+
+func (e *Engine) Run(addr string) (err error) {
+	return http.ListenAndServe(addr, e)
+}
+
+func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := newContext(w, r)
+	e.router.handle(c)
+}
+
+func (group *RouterGroup) addRouter(method string, comp string, handler HandlerFunc) {
+	pattern := group.prefix + comp
+	log.Printf("Route %v-%v", method, pattern)
+	group.engine.router.addRouter(method, pattern, handler)
+}
+
+func (group *RouterGroup) GET(pattern string, handler HandlerFunc) {
+	group.addRouter("GET", pattern, handler)
+}
+
+func (group *RouterGroup) POST(pattern string, handler HandlerFunc) {
+	group.addRouter("POST", pattern, handler)
+}
+```
+## 中间件
+非业务类技术组件.
+提供一个对外接口，允许用户自定义相关功能，插入到框架。
+关注的点：
+1. 插入点在哪？
+2. 中间件输入是什么？
+
+`Gee`中间件设计：
+1. 处理输入对象为`Context`;
+2. 插入点为框架接受到请求初始化`Context`之后，允许用户使用定义的中间件做一些额外处理；
+3. 通过调用`(*Context).Next()`函数，可以等待用户定义`handler`处理结束之后，做一些额外操作。
+```go
+func Logger() HandlerFunc {
+	return func(c *Context) {
+		// start timer
+		t := time.Now()
+		// process request
+		c.Next()
+
+		log.Printf("[%d] %s in %v", c.StatusCode, c.Req.RequestURI, time.Since(t))
+	}
+}
+```
+支持设置多个中间件，依次调用。
+中间件是应用在`Group`之上，应用在最顶层的`Group`相当于作用全局。
+`Context`的实现修改为：
+```go
+type Context struct {
+	// origin objects
+	Writer http.ResponseWriter
+	Req    *http.Request
+	// request info
+	Path   string
+	Method string
+	Params map[string]string
+	//response info
+	StatusCode int
+
+	handlers []HandlerFunc // 中间件
+	index    int           // 中间件索引
+}
+```
+其中`index`标记当前执行到第几个中间件，当调用`Next()`方法时，控制权交给下一个中间件,直到最后一个中间件，然后再从后向前,调用每个中间件在`Next`方法之后定义的操作。
+```go
+// 当接收到请求时，根据URL前缀判断适用的中间件
+// 将中间件放入到handlers slice,依次调用
+func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var middlewares []HandlerFunc
+	for _, group := range e.groups {
+		if strings.HasPrefix(r.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
+	c := newContext(w, r)
+	c.handlers = middlewares
+	e.router.handle(c)
+}
+```
 
 

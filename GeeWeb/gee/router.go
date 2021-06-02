@@ -73,13 +73,27 @@ func (r *router) getRouter(method string, pattern string) (*node, map[string]str
 	return nil, nil
 }
 
+// func (r *router) handle(c *Context) {
+// 	n, params := r.getRouter(c.Method, c.Path)
+// 	if nil != n {
+// 		c.Params = params
+// 		key := c.Method + "-" + n.pattern
+// 		r.handlers[key](c)
+// 	} else {
+// 		c.String(http.StatusNotFound, "404 Not Found, %s\n", c.Path)
+// 	}
+// }
+
 func (r *router) handle(c *Context) {
 	n, params := r.getRouter(c.Method, c.Path)
 	if nil != n {
-		c.Params = params
 		key := c.Method + "-" + n.pattern
-		r.handlers[key](c)
+		c.Params = params
+		c.handlers = append(c.handlers, r.handlers[key])
 	} else {
-		c.String(http.StatusNotFound, "404 Not Found, %s\n", c.Path)
+		c.handlers = append(c.handlers, func(c *Context) {
+			c.String(http.StatusNotFound, "404, Not Found, %s\n", c.Path)
+		})
 	}
+	c.Next()
 }

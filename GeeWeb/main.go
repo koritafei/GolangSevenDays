@@ -10,14 +10,64 @@ package main
 
 import (
 	"gee/gee"
+	"log"
 	"net/http"
+	"time"
 )
+
+func ProcessRequest() gee.HandlerFunc {
+	return func(c *gee.Context) {
+		t := time.Now()
+		log.Printf("middleware process request, +%v\n", c)
+		c.Next()
+		log.Printf("middleware process request, +%v,time %v\n", c, time.Since(t))
+	}
+}
+
+func ProcessRequest2() gee.HandlerFunc {
+	return func(c *gee.Context) {
+		t := time.Now()
+		log.Printf("middleware2 process request, +%v\n", c)
+		c.Next()
+		log.Printf("middleware2 process request, +%v,time %v\n", c, time.Since(t))
+	}
+}
 
 func main() {
 	r := gee.New()
-	r.GET("/", func(c *gee.Context) {
+	r.Use(gee.Logger())
+	r.GET("/index", func(c *gee.Context) {
 		c.HTML(http.StatusOK, "<br>Hello Gee!</br>")
 	})
+
+	v1 := r.Group("/v1")
+	v1.Use(ProcessRequest())
+	{
+		v1.GET("/", func(c *gee.Context) {
+			c.HTML(http.StatusOK, "<h1>Hello Gee</h1>")
+		})
+
+		v1.GET("/hello", func(c *gee.Context) {
+			// expect /hello?name=geektutu
+			c.String(http.StatusOK, "hello %s, you're at %s\n", c.Query("name"), c.Path)
+		})
+	}
+
+	v2 := r.Group("/v2")
+	v2.Use(ProcessRequest2())
+	{
+		v2.GET("/hello/:name", func(c *gee.Context) {
+			// expect /hello/geektutu
+			c.String(http.StatusOK, "hello %s, you're at %s\n", c.Param("name"), c.Path)
+		})
+		v2.POST("/login", func(c *gee.Context) {
+			c.JSON(http.StatusOK, gee.H{
+				"username": c.PostForm("username"),
+				"password": c.PostForm("password"),
+			})
+		})
+
+	}
 
 	r.GET("/hello", func(c *gee.Context) {
 		c.String(http.StatusOK, "hello %s, you are at %s", c.Query("name"), c.Path)
