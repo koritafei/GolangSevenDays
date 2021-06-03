@@ -3,6 +3,7 @@ package gee
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -20,6 +21,7 @@ type Context struct {
 
 	handlers []HandlerFunc // 中间件
 	index    int           // 中间件索引
+	engine   *Engine
 }
 
 func newContext(w http.ResponseWriter, req *http.Request) *Context {
@@ -74,10 +76,12 @@ func (c *Context) Data(code int, data []byte) {
 	c.Writer.Write(data)
 }
 
-func (c *Context) HTML(code int, html string) {
+func (c *Context) HTML(code int, name string, data interface{}) {
 	c.SetHeader("Context-Type", "text/html")
 	c.Status(code)
-	c.Writer.Write([]byte(html))
+	if err := c.engine.htmlTemplate.ExecuteTemplate(c.Writer, name, data); err != nil {
+		log.Fatalf("500, error: %v", err.Error())
+	}
 }
 
 func (c *Context) Next() {

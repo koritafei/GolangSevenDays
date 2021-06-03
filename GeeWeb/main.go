@@ -37,14 +37,14 @@ func main() {
 	r := gee.New()
 	r.Use(gee.Logger())
 	r.GET("/index", func(c *gee.Context) {
-		c.HTML(http.StatusOK, "<br>Hello Gee!</br>")
+		c.HTML(http.StatusOK, "<br>Hello Gee!</br>", nil)
 	})
 
 	v1 := r.Group("/v1")
 	v1.Use(ProcessRequest())
 	{
 		v1.GET("/", func(c *gee.Context) {
-			c.HTML(http.StatusOK, "<h1>Hello Gee</h1>")
+			c.HTML(http.StatusOK, "<h1>Hello Gee</h1>", nil)
 		})
 
 		v1.GET("/hello", func(c *gee.Context) {

@@ -557,5 +557,44 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	e.router.handle(c)
 }
 ```
+## 模板(`HTML Template`)
+### 服务端渲染
+当前前后端分离开发逐渐流行，即`Web`后端提供`RESTful`接口，返回结构化数据(`json`和`xml`格式).
+### 静态文件
+服务端渲染需要首先查找到对应文件。
+文件返回采用`http.FileServer`处理.
+```go
+func (group *RouterGroup) createStaticHandler(relativePath string, fs http.FileSystem) HandlerFunc {
+	absolutePath := path.Join(group.prefix, relativePath)
+	fileServer := http.StripPrefix(absolutePath, http.FileServer(fs))
+	return func(c *Context) {
+		file := c.Param("filepath")
+		if _, err := fs.Open(file); err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
 
+		fileServer.ServeHTTP(c.Writer, c.Req)
+	}
+}
+
+func (group *RouterGroup) Static(relativePath string, root string) {
+	handler := group.createStaticHandler(relativePath, http.Dir(root))
+	urlPattern := path.Join(relativePath, "/*filePath")
+	group.GET(urlPattern, handler)
+}
+```
+### `HTML`模板渲染
+Go语言内置了`text/template`和`html/template2`个模板标准库，其中`html/template`为 `HTML` 提供了较为完整的支持。包括普通变量渲染、列表渲染、对象渲染等。
+```go
+
+func (engine *Engine) SetFuncMap(funcMap template.FuncMap) {
+	engine.funcMap = funcMap
+}
+
+func (engine *Engine) LoadHtmlGlob(pattern string) {
+	engine.htmlTemplate = template.Must(template.New("").Funcs(engine.funcMap).ParseGlob(pattern))
+}
+
+```
 
