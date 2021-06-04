@@ -127,3 +127,5 @@ func (engine *Engine) SetFuncMap(funcMap template.FuncMap) {
 func (engine *Engine) LoadHtmlGlob(pattern string) {
 	engine.htmlTemplate = template.Must(template.New("").Funcs(engine.funcMap).ParseGlob(pattern))
 }
+
+
