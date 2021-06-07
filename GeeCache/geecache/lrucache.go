@@ -1,11 +1,11 @@
-package cache
+package geecache
 
 import (
 	"container/list"
 	"sync"
 )
 
-type cache struct {
+type LruCache struct {
 	lru        *Cache
 	mutex      sync.Mutex
 	cacheBytes int64
@@ -28,7 +28,7 @@ type Value interface {
 	Len() int
 }
 
-func (c *cache) Add(key string, value ByteView) {
+func (c *LruCache) Add(key string, value ByteView) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if nil == c.lru {
@@ -38,14 +38,14 @@ func (c *cache) Add(key string, value ByteView) {
 	c.lru.Add(key, value)
 }
 
-func (c *cache) Get(key string) (value Value, ok bool) {
+func (c *LruCache) Get(key string) (value Value, ok bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if nil == c.lru {
 		return
 	}
 
-	if v, ok := c.lru.find(key); ok {
+	if v, ok := c.lru.Get(key); ok {
 		return v.(ByteView), ok
 	}
 
@@ -64,7 +64,7 @@ func New(maxBytes int64, OnEvicted func(key string, value Value)) *Cache {
 }
 
 // find
-func (c *Cache) find(key string) (value Value, ok bool) {
+func (c *Cache) Get(key string) (value Value, ok bool) {
 	if elem, ok := c.cache[key]; ok {
 		c.ll.MoveToFront(elem)
 		kv := elem.Value.(*entry)

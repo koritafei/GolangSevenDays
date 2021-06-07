@@ -1,7 +1,8 @@
-package cache
+package geecache
 
 import (
 	"fmt"
+	"geecache/geecache/signlefight"
 	"log"
 	"sync"
 )
@@ -19,7 +20,9 @@ func (f GetFunc) Get(key string) ([]byte, error) {
 type Group struct {
 	name      string
 	getter    Getter
-	mainCache cache
+	mainCache *LruCache
+	peers PeerPicker
+	loader *signlefight.Group
 }
 
 var (
@@ -36,38 +39,62 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 	g := &Group{
 		name:   name,
 		getter: getter,
-		mainCache: &cache{
+		mainCache: &LruCache{
 			cacheBytes: cacheBytes,
 		},
+		loader: &signlefight.Group{},
 	}
 	groups[name] = g
 
 	return g
 }
 
+
+func (g *Group) RegisterPeers(peer PeerPicker){
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peer
+}
+
 func GetGroup(name string) *Group {
-	mu.Lock()
+	mu.RLock()
 	g := groups[name]
 	mu.RUnlock()
 
 	return g
 }
 
-func (g *Group) get(key string) (ByteView, error) {
+func (g *Group) Get(key string) (ByteView, error) {
 	if "" == key {
 		return ByteView{}, fmt.Errorf("key is required")
 	}
 
-	if v, ok := g.mainCache.find(key); ok {
+	if v, ok := g.mainCache.lru.Get(key); ok {
 		log.Printf("[GeeCache] hit")
-		return v, nil
+		return v.(ByteView), nil
 	}
 
 	return g.load(key)
 }
 
-func (g *Group) load(key string) (ByteView, error) {
+func (g *Group) load(key string) (value ByteView, err error) {
+	
+	viewi, err := g.loader.Do(key,  func() (interface{}, error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key);ok {
+			if value, err = g.getFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+			log.Println("[GeeCache] Failed to get from peer", err)
+		}
+	}
 	return g.getlocally(key)
+})
+	if err == nil {
+		return viewi.(ByteView), nil
+	}
+	return 
 }
 
 func (g *Group) getlocally(key string) (ByteView, error) {
@@ -82,4 +109,14 @@ func (g *Group) getlocally(key string) (ByteView, error) {
 }
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.Add(key, value)
+}
+
+func (g *Group)getFromPeer(peer PeerGetter,key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{},err
+	}
+
+	return ByteView{b:bytes}, nil
+
 }
