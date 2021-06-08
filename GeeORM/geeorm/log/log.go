@@ -9,7 +9,7 @@ import (
 
 // log.Lshortfile 支持显示文件名和行号
 var (
-	errLog = log.New(os.Stdout,"\033[31m[error]]\033[0m", log.LstdFlags|log.Lshortfile)
+	errLog = log.New(os.Stdout,"\033[31m[error]\033[0m", log.LstdFlags|log.Lshortfile)
 	infoLog = log.New(os.Stdout,"\033[34m[info]\033[0m", log.LstdFlags|log.Lshortfile)
 	loggers = []*log.Logger{errLog, infoLog}
 
