@@ -2,6 +2,7 @@ package geeorm
 
 import (
 	"database/sql"
+	"geeorm/geeorm/dialect"
 	"geeorm/geeorm/log"
 
 	"geeorm/geeorm/sessions"
@@ -9,6 +10,7 @@ import (
 
 type Engine struct {
 	db *sql.DB
+	dialect dialect.Dialect
 }
 
 func NewEngine(driver, source string) (engine *Engine,err error) {
@@ -24,9 +26,17 @@ func NewEngine(driver, source string) (engine *Engine,err error) {
 		return 
 	}
 
+	dial, ok := dialect.GetDialect(driver)
+	if !ok {
+		log.Error("Dialect %s Not Found", driver)
+		return 
+	}
+
 	engine = &Engine{
 		db:db,
+		dialect:dial,
 	}
+
 
 	log.Info("Connect database sucessfully!")
 
@@ -43,5 +53,5 @@ func (engine *Engine)Close() {
 }
 
 func (engine *Engine)NewSession() *sessions.Session {
-	return sessions.New(engine.db)
+	return sessions.New(engine.db, engine.dialect)
 }

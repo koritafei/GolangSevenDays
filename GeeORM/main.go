@@ -20,7 +20,6 @@ func main() {
 	
 	fmt.Printf("result %v, count %v\n", result, count)
 	results, _ := s.Raw("SELECT * FROM User;").Exec()
-
 	fmt.Printf("results %v\n", results)
 }
 

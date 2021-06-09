@@ -2,23 +2,33 @@ package sessions
 
 import (
 	"database/sql"
+	"geeorm/geeorm/Schema"
+	"geeorm/geeorm/clause"
+	"geeorm/geeorm/dialect"
 	"geeorm/geeorm/log"
 	"strings"
 )
 
 type Session struct {
 	db *sql.DB
+	dialect dialect.Dialect
+	refTable *Schema.Schema
+	clause clause.Clause
 	sql strings.Builder
 	sqlVars []interface{}
 }
 
-func New(db *sql.DB) *Session {
-	return &Session{db: db,}
+func New(db *sql.DB, dialect dialect.Dialect) *Session {
+	return &Session{
+		db: db,
+		dialect: dialect,
+	}
 }
 
 func (s *Session)Clear() {
 	s.sql.Reset()
 	s.sqlVars = nil
+	s.clause = clause.Clause{}
 }
 
 func (s *Session)DB() *sql.DB {
