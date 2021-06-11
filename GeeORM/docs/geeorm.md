@@ -458,6 +458,138 @@ func (s *Session)First(value interface{}) error {
 ```
 ### 实现钩子(`HOOK`)
 即在可能在增加功能的地方，预先埋好一个钩子，当需要增加功能时，把扩展类和方法挂载到这个点上。
+```go
+package sessions
+
+import (
+	"geeorm/geeorm/log"
+	"reflect"
+)
+
+const (
+	BeforeQuery = "BeforeQuery"
+	AfterQuery = "AfterQuery"
+	BeforeUpdate = "BeforeUpdate"
+	AfterUpdate = "AfterUpdate"
+	BeforeDelete = "BeforeDelete"
+	AfterDelete = "AfterDelete"
+	BeforeInsert = "BeforeInsert"
+	AfterInsert = "AfterInsert"
+)
+
+func (s *Session)CallMethod(method string, value interface{}) {
+	fm := reflect.ValueOf(s.RefTable().Model).MethodByName(method)
+
+	if nil != value {
+		fm = reflect.ValueOf(value).MethodByName(method)
+	}
+
+	param := []reflect.Value{reflect.ValueOf(s)}
+	if fm.IsValid() {
+		if v := fm.Call(param); len(v) > 0 {
+			if err, ok := v[0].Interface().(error); ok {
+				log.Error(err)
+			}
+		}
+	}
+
+	return 
+}
+```
+### 支持事务
+```go
+package sessions
+
+import "geeorm/geeorm/log"
+
+func (s *Session)Begin() (err error) {
+	log.Info("transaction begin")
+	if s.tx, err = s.db.Begin(); err != nil {
+		log.Error(err)
+		return 
+	}
+
+	return 
+}
+
+func (s *Session) Commit() (err error) {
+	log.Info("transaction commit")
+	if err = s.tx.Commit(); err != nil {
+		log.Error(err)
+		return 
+	}
+
+	return
+}
+
+func (s *Session) Rollback() (err error) {
+	log.Info("transaction rollback")
+	if err = s.tx.Rollback(); err != nil {
+		log.Error(err)
+		return 
+	}
+
+	return 
+}
+```
+### 数据库迁移
+```go
+
+func difference(a, b []string) (diff []string) {
+	mapB := make(map[string]bool)
+
+	for _,v := range b {
+		mapB[v] = true
+	}
+
+	for _,v := range a {
+		if _, ok := mapB[v]; !ok {
+			diff = append(diff,v)
+		}
+	}
+	return 
+}
+
+func (engine *Engine) Migrate(value interface{}) error {
+	_, err := engine.Transaction(
+		func (s *sessions.Session) (result interface{}, err error) {
+			if !s.Model(value).HasTable() {
+				log.Info("table %s does not exist", s.RefTable().Name)
+				return nil, s.CreateTable()
+			}
+
+			table := s.RefTable()
+			rows, _ := s.Raw(fmt.Sprintf("SELECT * FORM %s LIMIT 1", table.Name)).QueryRows()
+			columns, _ := rows.Columns()
+			addCols := difference(table.FieldName,columns)
+			delCols := difference(columns, table.FieldName)
+
+			log.Info("add cols %v, del cols %v", addCols, delCols)
+			for _, col := range addCols {
+				f := table.GetField(col)
+				sqlStr := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table.Name, f.Name, f.Type)
+				if _, err = s.Raw(sqlStr).Exec(); err != nil {
+					return 
+				}
+			}
+
+			if len(delCols) == 0 {
+				return 
+			}
+
+			tmp := "tmp_" + table.Name
+			fieldStr := strings.Join(table.FieldName, ", ")
+			s.Raw(fmt.Sprintf("CREATE TABLE %s AS SELECT %s from %s;", tmp, fieldStr, table.Name))
+			s.Raw(fmt.Sprintf("DROP TABLE %s;", table.Name))
+			s.Raw(fmt.Sprintf("ALTER TABLE %s RENAME TO %s;", tmp, table.Name))
+
+			_, err = s.Exec()
+			return 
+		})
 
 
+
+	return err
+}
+```
 
