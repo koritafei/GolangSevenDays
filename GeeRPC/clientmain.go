@@ -24,7 +24,7 @@ func startserver(addr chan string) {
 }
 
 
-func main() {
+func clientmain() {
 	log.SetFlags(0)
 	addr := make(chan string)
 
